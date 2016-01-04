@@ -1,0 +1,11 @@
+[{
+    "step_title": "Watched photo directory",
+    "items": [{
+        "type": "textfield",
+	"desc": "Watched photo directory (under photo share)",
+	"subitems": [{
+	    "key": "UI_PHOTO_DIR",
+	    "desc": "eg. unorganized (leave blank for root of web share)"
+	}]
+    }]
+}]

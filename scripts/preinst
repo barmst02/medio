@@ -1,0 +1,27 @@
+#!/bin/sh
+# Copyright(c) 2016 Jonathan Poland
+
+PYTHON='python'
+PERL='perl'
+
+check_file()
+{
+    which "$1" > /dev/null 2>&1
+    if [ "$?" -ne "0" ]; then
+        echo "Cannot find $1" >> $SYNOPKG_TEMP_LOGFILE
+	exit 1
+    fi
+}
+
+check_python_cmd()
+{
+    $PYTHON -c "$1" > /dev/null 2>&1
+    if [ "$?" -ne "0" ]; then
+        echo "Python cannot run: $1" >> $SYNOPKG_TEMP_LOGFILE
+        exit 1
+    fi
+}
+
+check_file $PERL
+check_file $PYTHON
+exit 0

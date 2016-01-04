@@ -1,0 +1,8 @@
+package="Medio"
+displayname="Medio"
+version="0.1"
+maintainer="Jonathan Poland"
+description="Watches a directory for new media, then moves it to the appropriate chronological album (year/month) based on EXIF metadata.  https://bitbucket.org/polandj/medio/"
+firmware="5.2"
+startable="yes"
+install_dep_packages="Python>2.7:Perl"

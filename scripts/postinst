@@ -1,0 +1,32 @@
+#!/bin/sh
+# Copyright(c) 2016 Jonathan Poland
+
+# Link to the install location and fix perms
+LINK="/usr/syno/synoman/webman/3rdparty/Medio"
+ret=`ln -s "${SYNOPKG_PKGDEST}/" ${LINK}`
+
+DATE=`date`
+
+# Exit early on upgrade
+if [ -f ${SYNOPKG_PKGDEST}/cfg.ini ]; then
+    echo "Upgrade successful" >> $SYNOPKG_TEMP_LOGFILE
+    echo "[${DATE}] Upgrade successful" >> "${SYNOPKG_PKGDEST}/medio.log"
+    exit 0
+fi
+
+# Check items set in UI
+UI_PHOTO_DIR='/var/services/photo/'
+if [ ! -d $UI_PHOTO_DIR ]; then
+    echo "Photo directory, ${UI_PHOTO_DIR}, does not exist" >> $SYNOPKG_TEMP_LOGFILE
+    exit 1
+fi
+
+# Save off config for python to use later at runtime
+CFG="${SYNOPKG_PKGDEST}/cfg.ini"
+echo "[UI]" >> $CFG
+echo "UI_PHOTO_DIR=${UI_PHOTO_DIR}" >> $CFG
+
+echo "[${DATE}] Installation successful" >> "${SYNOPKG_PKGDEST}/medio.log"
+echo "[${DATE}] Configuration saved at ${SYNOPKG_PKGDEST}/cfg.ini" >> "${SYNOPKG_PKGDEST}/medio.log"
+
+exit 0 

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Copyright(c) 2016 Jonathan Poland
+# Put config (cfg.ini) into temp dir to be installed with pkg
+
+DIR="/usr/syno/synoman/webman/3rdparty/Medio"
+
+PID=""
+get_pid() 
+{
+    PID=`ps -w | grep -v grep | grep python | grep medio | awk '{print $1}'`
+}
+if [ -z $PID ]; then
+    kill $PID
+    sleep 2
+fi
+cp ${DIR}/cfg.ini ${SYNOPKG_PKGINST_TEMP_DIR}
+exit 0
