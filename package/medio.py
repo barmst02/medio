@@ -2,7 +2,7 @@
 # exiftool -r -d DSTDIR/%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e "-filename<CreateDate" SRCDIR
 #
 
-import os, time, sys, traceback
+import os, time, sys, traceback, subprocess
 import pyinotify
 import ConfigParser
 from threading import Timer
@@ -40,24 +40,38 @@ cfg = Config()
 def process_file(path):
     srcdir = os.path.join(PHOTO_DIR, cfg.UI_SRCDIR, path)
     dstdir = os.path.join(PHOTO_DIR, cfg.UI_DSTDIR, r'%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e')
-    cmd = 'exiftool -r -d %s "-filename<CreateDate" %s' % (dstdir, srcdir)
-    log("RUN %s" % cmd)
+    cmd = [os.path.join(PKGDIR, 'exiftool'), '-r', '-d', dstdir, "-filename<CreateDate", srcdir]
+    p = Process(cmd)
+    if p.retval == 0:
+        log('exiftool succeeded for ' + path + ': ' + ' '.join(p.stdout.split('\n')))
+    else:
+        log('exiftool FAILED for ' + path + ': ' +  ' '.join(p.stderr.split('\n')))
 
 class EventHandler(pyinotify.ProcessEvent):
+    def is_relevant_file(self, path):
+        (root, ext) = os.path.splitext(path)
+        if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4']:
+            return True
+        return False
     def process_IN_CREATE(self, event):
-        log("Created: %s" % event.pathname)
-        Timer(5, process_file, (event.pathname,)).start()
-        
-    def process_IN_MOVED_TO(self, event):
-        log("Moved in: %s" % event.pathname)
+        if self.is_relevant_file(event.pathname):
+            log("Notified of new file: %s" % event.pathname)
+            Timer(15, process_file, (event.pathname,)).start()
         
     def process_IN_CLOSE_WRITE(self, event):
-        log("Wrote: %s" % event.pathname)
+        if self.is_relevant_file(event.pathname):
+            log("Notified of file write: %s" % event.pathname)
+
+    def process_IN_MOVED_TO(self, event):
+        if self.is_relevant_file(event.pathname):
+            log("Notified of file moved in: %s" % event.pathname)
+            Timer(5, process_file, (event.pathname,)).start()
+        
         
 if __name__ == '__main__':
     try:
         wm = pyinotify.WatchManager()
-        mask = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO 
+        mask = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO | pyinotify.IN_CLOSE_WRITE
         notifier = pyinotify.Notifier(wm, EventHandler())
         wdd = wm.add_watch(os.path.join(PHOTO_DIR, cfg.UI_SRCDIR), mask)
         notifier.loop()
