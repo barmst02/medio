@@ -15,16 +15,24 @@ if [ -f ${SYNOPKG_PKGDEST}/cfg.ini ]; then
 fi
 
 # Check items set in UI
-UI_PHOTO_DIR='/var/services/photo/'
-if [ ! -d $UI_PHOTO_DIR ]; then
-    echo "Photo directory, ${UI_PHOTO_DIR}, does not exist" >> $SYNOPKG_TEMP_LOGFILE
+PHOTO_DIR='/var/services/photo/'
+SRCDIR=$(echo "${UI_SRCDIR}" | tr -d . | tr -s / | sed 's/^\/\(.*\)\/$/\1/g')
+if [ ! -d $PHOTO_DIR$SRCDIR ]; then
+    echo "Source directory, ${SRCDIR}, does not exist" >> $SYNOPKG_TEMP_LOGFILE
+    exit 1
+fi
+
+DSTDIR=$(echo "${UI_DSTDIR}" | tr -d . | tr -s / | sed 's/^\/\(.*\)\/$/\1/g')
+if [ ! -d $PHOTO_DIR$DSTDIR ]; then
+    echo "Destination directory, ${DSTDIR}, does not exist" >> $SYNOPKG_TEMP_LOGFILE
     exit 1
 fi
 
 # Save off config for python to use later at runtime
 CFG="${SYNOPKG_PKGDEST}/cfg.ini"
-echo "[UI]" >> $CFG
-echo "UI_PHOTO_DIR=${UI_PHOTO_DIR}" >> $CFG
+echo "[UI]" > $CFG
+echo "UI_SRCDIR=${SRCDIR}" >> $CFG
+echo "UI_DSTDIR=${DSTDIR}" >> $CFG
 
 echo "[${DATE}] Installation successful" >> "${SYNOPKG_PKGDEST}/medio.log"
 echo "[${DATE}] Configuration saved at ${SYNOPKG_PKGDEST}/cfg.ini" >> "${SYNOPKG_PKGDEST}/medio.log"

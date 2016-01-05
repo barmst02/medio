@@ -1,11 +1,14 @@
 [{
-    "step_title": "Watched photo directory",
+    "step_title": "Directories",
     "items": [{
         "type": "textfield",
-	"desc": "Watched photo directory (under photo share)",
+	"desc": "Directory configuration, relative to the photo share.  The Source Directory is monitored for new photos which are then moved into the Destination directory based on EXIF data.",
 	"subitems": [{
-	    "key": "UI_PHOTO_DIR",
-	    "desc": "eg. unorganized (leave blank for root of web share)"
-	}]
+	    "key": "UI_SRCDIR",
+	    "desc": "Source directory"
+	 }, {
+	    "key": "UI_DSTDIR",
+	    "desc": "Destination directory"
+	 }]
     }]
 }]
