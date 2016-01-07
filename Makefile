@@ -7,6 +7,8 @@ PACKAGE_FILES := $(shell ./package.sh)
 all: package.tgz Medio-${VERSION}.spk
 
 package.tgz: ${PACKAGE_FILES}
+	# Use python itself as a basic syntax linter
+	python -c "from package import medio"
 	@echo 'Remaking package tarball'
 	@tar czf package.tgz -C package $(subst package,.,${PACKAGE_FILES})
 
