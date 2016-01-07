@@ -17,6 +17,8 @@ def log(msg):
     l.write('[%s] %s\n' % (time.ctime(), str(msg)))
 
 class Config(object):
+    """A simple container to parse and feed back out INI-style config.  The config
+       file is written via shell code, this is readonly."""
     def __init__(self):
         self.cfg = ConfigParser.SafeConfigParser()
         self.cfg.read(os.path.join(PKGDIR, 'cfg.ini'))
@@ -29,7 +31,8 @@ class Config(object):
     def UI_DSTDIR(self):
         return self.cfg.get('UI', 'UI_DSTDIR')
 
-class Process(object):
+class Spawn(object):
+    """A wrapper around subprocess just to save boilerplate"""
     def __init__(self, args, shell=False, env=None):
         handle = subprocess.Popen(args, stdin=open(os.devnull, 'r'), stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, close_fds=True, shell=shell, env=env)
@@ -37,6 +40,9 @@ class Process(object):
         self.retval = handle.wait()
 
 class LoggingTimer(_Timer):
+    """A threading.Timer that will catch exceptions in run() and log them to our
+       global log file.  Without this, threads would throw and exit, but leave
+       no trace."""
     def run(self):
         try:
             _Timer.run(self)
@@ -44,38 +50,46 @@ class LoggingTimer(_Timer):
             err = traceback.format_exc(2)
             log(err)
 
-cfg = Config()
-
 class EventHandler(pyinotify.ProcessEvent):
-    active = {}
-    reindex_timer = None
+    """This class handles our file change events, hence does most of the work"""
     rename_re = re.compile(r"'(\S+)'\s+-->\s+'(\S+)'")
+    reindex_timer = None
+    cfg = None
+    active = {}
 
-    def __init__(self):
+    def __init__(self, cfg):
+        self.cfg = cfg
         # Check for files we may have missed and queue events to process them
-        for entry in os.listdir(os.path.join(PHOTO_DIR, cfg.UI_SRCDIR)):
+        for entry in os.listdir(os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR)):
             if self.is_relevant_file(entry):
                 log(entry)
                 LoggingTimer(1, self.process_file, (entry,)).start()
+
     def reindex(self):
-        cmd = ['/usr/syno/bin/synoindex', '-R', os.path.join(PHOTO_DIR, cfg.UI_SRCDIR)]
-        p = Process(cmd)
+        """synoindex -n doesn't seem to be a reliable way to make sure things get
+           indexed correctly.  So, call this to do a full reindex on our watched directory
+           after a file (or set of files) have been processed"""
+        cmd = ['/usr/syno/bin/synoindex', '-R', os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR)]
+        p = Spawn(cmd)
         if p.retval != 0:
             log('synoindex reindex FAILED: ' +  ' '.join(p.stderr.split('\n')))
-        log('Reindexing %s...' % os.path.join(PHOTO_DIR, cfg.UI_SRCDIR))
+        log('Reindexing %s...' % os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR))
         self.reindex_timer = None
 
     def process_file(self, path):
+        """This does the bulk of the work.  Calls exiftool to do the rename and synoindex 
+           to tell DSM about it."""
+        # Mark as no longer actively being processed
         if path in self.active:
             del self.active[path]
-        srcfile = os.path.join(PHOTO_DIR, cfg.UI_SRCDIR, path)
-        dstfmt = os.path.join(PHOTO_DIR, cfg.UI_DSTDIR, r'%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e')
-        dstfile = None
         # Use exiftool to do the rename
+        srcfile = os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR, path)
+        dstfmt = os.path.join(PHOTO_DIR, self.cfg.UI_DSTDIR, r'%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e')
+        dstfile = None
         cmd = [os.path.join(PKGDIR, 'exiftool'), '-v', '-r', '-d', dstfmt, 
                 "-filename<filemodifydate", "-filename<createdate", 
                 "-filename<datetimeoriginal", srcfile]
-        p = Process(cmd)
+        p = Spawn(cmd)
         if p.retval != 0:
             log('exiftool FAILED for ' + path + ': ' +  ' '.join(p.stderr.split('\n')))
             return
@@ -85,40 +99,44 @@ class EventHandler(pyinotify.ProcessEvent):
                 dstfile = m.group(2)
                 log('Moved %s to %s' % (srcfile, dstfile))
         if dstfile is None:
-            log('exiftool succeeded, but no output information found')
+            log('exiftool succeeded, but no file rename information found')
             return
         # Tell synology it moved (synoindex)
         cmd = ['/usr/syno/bin/synoindex', '-n', dstfile, srcfile]
-        p = Process(cmd)
+        p = Spawn(cmd)
         if p.retval != 0:
             log('synoindex FAILED for ' + path + ': ' +  ' '.join(p.stderr.split('\n')))
-        # Reindex the whole thing, if we have a lull in new files
+        # Queue a reindex on everything, cancel any such existing timer
         if self.reindex_timer:
             self.reindex_timer.cancel()
         self.reindex_timer = LoggingTimer(30, self.reindex)
         self.reindex_timer.start()
 
     def is_relevant_file(self, path):
+        """Return whether or not we care about this file type"""
         (root, ext) = os.path.splitext(path)
         if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4']:
             return True
         return False
 
     def process_IN_CREATE(self, event):
+        """We see this when we upload via the network (NFS, AFS, SMB)"""
         if self.is_relevant_file(event.pathname):
             log("Notified of new file: %s" % event.pathname)
             self.active[event.pathname] = LoggingTimer(3, self.process_file, (event.pathname,))
             self.active[event.pathname].start()
         
     def process_IN_CLOSE_WRITE(self, event):
+        """We see lots of these per file when uploading via the network"""
         if self.is_relevant_file(event.pathname):
-            log("Notified of file write: %s" % event.pathname)
             if event.pathname in self.active:
                 self.active[event.pathname].cancel()
                 self.active[event.pathname] = LoggingTimer(3, self.process_file, (event.pathname,))
                 self.active[event.pathname].start()
 
     def process_IN_MOVED_TO(self, event):
+        """We see this when the DS photo app uploads stuff or we use file manager to move
+           files in from somewhere else"""
         if self.is_relevant_file(event.pathname):
             log("Notified of file moved in: %s" % event.pathname)
             LoggingTimer(3, self.process_file, (event.pathname,)).start()
@@ -126,9 +144,10 @@ class EventHandler(pyinotify.ProcessEvent):
         
 if __name__ == '__main__':
     try:
+        cfg = Config()
         wm = pyinotify.WatchManager()
         mask = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO | pyinotify.IN_CLOSE_WRITE
-        notifier = pyinotify.Notifier(wm, EventHandler())
+        notifier = pyinotify.Notifier(wm, EventHandler(cfg))
         wdd = wm.add_watch(os.path.join(PHOTO_DIR, cfg.UI_SRCDIR), mask)
         notifier.loop()
     except:
