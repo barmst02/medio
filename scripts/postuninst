@@ -2,4 +2,5 @@
 # Copyright(c) 2016 Jonathan Poland
 DIR="/usr/syno/synoman/webman/3rdparty/Medio"
 rm -f $DIR
+echo "Thanks for trying Medio, sorry to see you go.  Feedback is appreciated!  https://bitbucket.org/polandj/medio/" >> $SYNOPKG_TEMP_LOGFILE
 exit 0
