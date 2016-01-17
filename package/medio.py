@@ -6,7 +6,8 @@
 import re, os, time, sys, traceback, subprocess
 import pyinotify
 import ConfigParser
-from threading import _Timer
+import Queue
+from threading import Thread, _Timer
 
 PKGDIR="/usr/syno/synoman/webman/3rdparty/Medio"
 PHOTO_DIR = '/var/services/photo/'
@@ -50,20 +51,18 @@ class LoggingTimer(_Timer):
             err = traceback.format_exc(2)
             log(err)
 
-class EventHandler(pyinotify.ProcessEvent):
-    """This class handles our file change events, hence does most of the work"""
+class Worker(Thread):
+    """A single thread to do most of the work.  Waits on a Queue for new work"""
     rename_re = re.compile(r"'(\S+)'\s+-->\s+'(\S+)'")
     reindex_timer = None
     cfg = None
-    active = {}
+    q = None
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, q):
+        Thread.__init__(self)
         self.cfg = cfg
-        # Check for files we may have missed and queue events to process them
-        for entry in os.listdir(os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR)):
-            if self.is_relevant_file(entry):
-                log(entry)
-                LoggingTimer(1, self.process_file, (entry,)).start()
+        self.q = q
+        self.start()
 
     def reindex(self):
         """synoindex -n doesn't seem to be a reliable way to make sure things get
@@ -79,9 +78,6 @@ class EventHandler(pyinotify.ProcessEvent):
     def process_file(self, path):
         """This does the bulk of the work.  Calls exiftool to do the rename and synoindex 
            to tell DSM about it."""
-        # Mark as no longer actively being processed
-        if path in self.active:
-            del self.active[path]
         # Use exiftool to do the rename
         srcfile = os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR, path)
         dstfmt = os.path.join(PHOTO_DIR, self.cfg.UI_DSTDIR, r'%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e')
@@ -112,6 +108,33 @@ class EventHandler(pyinotify.ProcessEvent):
         self.reindex_timer = LoggingTimer(30, self.reindex)
         self.reindex_timer.start()
 
+    def run(self):
+        errorCount = 0
+        while errorCount < 5:
+            try:
+                path = self.q.get()
+                self.process_file(path)
+                self.q.task_done()
+            except:
+                errorCount += 1
+                err = traceback.format_exc(2)
+                log(err)
+        log('Too many errors, Worker thread exiting')
+
+class EventHandler(pyinotify.ProcessEvent):
+    """This class handles our file change events, hence does most of the work"""
+    cfg = None
+    q = None
+    active = {}
+
+    def __init__(self, cfg, q):
+        self.cfg = cfg
+        self.q = q
+        # Check for files we may have missed and queue them
+        for entry in os.listdir(os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR)):
+            if self.is_relevant_file(entry):
+                self.q.put(entry)
+
     def is_relevant_file(self, path):
         """Return whether or not we care about this file type"""
         (root, ext) = os.path.splitext(path)
@@ -119,11 +142,16 @@ class EventHandler(pyinotify.ProcessEvent):
             return True
         return False
 
+    def enqueue(self, path):
+        if path in self.active:
+            del self.active[path]
+        self.q.put(path)
+
     def process_IN_CREATE(self, event):
         """We see this when we upload via the network (NFS, AFS, SMB)"""
         if self.is_relevant_file(event.pathname):
             log("Notified of new file: %s" % event.pathname)
-            self.active[event.pathname] = LoggingTimer(3, self.process_file, (event.pathname,))
+            self.active[event.pathname] = LoggingTimer(2, self.enqueue, (event.pathname,))
             self.active[event.pathname].start()
         
     def process_IN_CLOSE_WRITE(self, event):
@@ -131,7 +159,7 @@ class EventHandler(pyinotify.ProcessEvent):
         if self.is_relevant_file(event.pathname):
             if event.pathname in self.active:
                 self.active[event.pathname].cancel()
-                self.active[event.pathname] = LoggingTimer(3, self.process_file, (event.pathname,))
+                self.active[event.pathname] = LoggingTimer(2, self.enqueue, (event.pathname,))
                 self.active[event.pathname].start()
 
     def process_IN_MOVED_TO(self, event):
@@ -139,15 +167,16 @@ class EventHandler(pyinotify.ProcessEvent):
            files in from somewhere else"""
         if self.is_relevant_file(event.pathname):
             log("Notified of file moved in: %s" % event.pathname)
-            LoggingTimer(3, self.process_file, (event.pathname,)).start()
-        
+            self.q.put(event.pathname)
         
 if __name__ == '__main__':
     try:
         cfg = Config()
+        q = Queue.Queue()
+        worker = Worker(cfg, q)
         wm = pyinotify.WatchManager()
+        notifier = pyinotify.Notifier(wm, EventHandler(cfg, q))
         mask = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO | pyinotify.IN_CLOSE_WRITE
-        notifier = pyinotify.Notifier(wm, EventHandler(cfg))
         wdd = wm.add_watch(os.path.join(PHOTO_DIR, cfg.UI_SRCDIR), mask)
         notifier.loop()
     except:

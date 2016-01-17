@@ -1,5 +1,4 @@
 #!/bin/sh
 # Copyright(c) 2016 Jonathan Poland
-# Restore S3.ini
 cp ${SYNOPKG_PKGINST_TEMP_DIR}/cfg.ini ${SYNOPKG_PKGDEST}
 exit 0
