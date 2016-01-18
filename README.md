@@ -14,10 +14,3 @@ If you are interested in helping out with this project, please let me know, I wi
 
 Donations welcome: **128PqHs6hHLNXvBQaWYEbDowrTvrnRQ7df**.
 
-Changelog
----------
-
-0.1
- 
- - First release with basic functionality
- 
