@@ -56,12 +56,12 @@ class Worker(Thread):
     rename_re = re.compile(r"'(\S+)'\s+-->\s+'(\S+)'")
     reindex_timer = None
     cfg = None
-    q = None
+    workq = None
 
-    def __init__(self, cfg, q):
+    def __init__(self, cfg, workq):
         Thread.__init__(self)
         self.cfg = cfg
-        self.q = q
+        self.workq = workq
         self.start()
 
     def reindex(self):
@@ -93,7 +93,9 @@ class Worker(Thread):
             m = self.rename_re.match(line)
             if m and m.group(1) == srcfile:
                 dstfile = m.group(2)
-                log('Moved %s to %s' % (srcfile, dstfile))
+                common = os.path.commonprefix([srcfile, dstfile])
+                log('Moved %s to %s' % (os.path.relpath(srcfile, common), 
+                                        os.path.relpath(dstfile, common)))
         if dstfile is None:
             log('exiftool succeeded, but no file rename information found')
             return
@@ -112,28 +114,77 @@ class Worker(Thread):
         errorCount = 0
         while errorCount < 5:
             try:
-                path = self.q.get()
+                path = self.workq.get()
                 self.process_file(path)
-                self.q.task_done()
+                self.workq.task_done()
             except:
                 errorCount += 1
                 err = traceback.format_exc(2)
                 log(err)
         log('Too many errors, Worker thread exiting')
 
-class EventHandler(pyinotify.ProcessEvent):
-    """This class handles our file change events, hence does most of the work"""
+class Watcher(Thread):
+    """A thread to watch files that are in transit"""
     cfg = None
-    q = None
+    workq = None
+    watchq = None
+    timer = None
     active = {}
 
-    def __init__(self, cfg, q):
+    def __init__(self, cfg, workq, watchq):
+        Thread.__init__(self)
         self.cfg = cfg
-        self.q = q
+        self.workq = workq
+        self.watchq = watchq
+        self.start()
+
+    def check_actives(self):
+        # Check all actives
+        now = time.time()
+        for filepath, tstamp in self.active.items():
+            if now - tstamp > 30:
+                self.workq.put(filepath)
+                del self.active[filepath]
+        # Check again soon if there's more
+        if len(self.active) > 0:
+            if self.timer:
+                self.timer.cancel()
+            self.timer = LoggingTimer(5, self.check_actives)
+            self.timer.start()
+
+    def process_file(self, path):
+        filesize = os.path.exists(path) and os.stat(path).st_size or 0
+        if filesize > 0:
+            self.active[path] = time.time()
+            self.check_actives()
+
+    def run(self):
+        errorCount = 0
+        while errorCount < 5:
+            try:
+                path = self.watchq.get()
+                self.process_file(path)
+                self.watchq.task_done()
+            except:
+                errorCount += 1
+                err = traceback.format_exc(2)
+                log(err)
+        log('Too many errors, Watcher thread exiting')
+
+class EventHandler(pyinotify.ProcessEvent):
+    """This class handles our file change events queueing events to our work and watch queues"""
+    cfg = None
+    workq = None
+    watchq = None
+
+    def __init__(self, cfg, workq, watchq):
+        self.cfg = cfg
+        self.workq = workq
+        self.watchq = watchq
         # Check for files we may have missed and queue them
         for entry in os.listdir(os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR)):
             if self.is_relevant_file(entry):
-                self.q.put(entry)
+                self.watchq.put(os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR, entry))
 
     def is_relevant_file(self, path):
         """Return whether or not we care about this file type"""
@@ -142,42 +193,36 @@ class EventHandler(pyinotify.ProcessEvent):
             return True
         return False
 
-    def enqueue(self, path):
-        if path in self.active:
-            del self.active[path]
-        self.q.put(path)
-
     def process_IN_CREATE(self, event):
         """We see this when we upload via the network (NFS, AFS, SMB)"""
         if self.is_relevant_file(event.pathname):
-            log("Notified of new file: %s" % event.pathname)
-            self.active[event.pathname] = LoggingTimer(2, self.enqueue, (event.pathname,))
-            self.active[event.pathname].start()
+            self.watchq.put(event.pathname)
         
     def process_IN_CLOSE_WRITE(self, event):
         """We see lots of these per file when uploading via the network"""
         if self.is_relevant_file(event.pathname):
-            if event.pathname in self.active:
-                self.active[event.pathname].cancel()
-                self.active[event.pathname] = LoggingTimer(2, self.enqueue, (event.pathname,))
-                self.active[event.pathname].start()
+            self.watchq.put(event.pathname)
 
     def process_IN_MOVED_TO(self, event):
         """We see this when the DS photo app uploads stuff or we use file manager to move
            files in from somewhere else"""
         if self.is_relevant_file(event.pathname):
-            log("Notified of file moved in: %s" % event.pathname)
-            self.q.put(event.pathname)
+            self.workq.put(event.pathname)
         
 if __name__ == '__main__':
     try:
         cfg = Config()
-        q = Queue.Queue()
-        worker = Worker(cfg, q)
+        workq = Queue.Queue()
+        watchq = Queue.Queue()
+        worker = Worker(cfg, workq)
+        watcher = Watcher(cfg, workq, watchq)
         wm = pyinotify.WatchManager()
-        notifier = pyinotify.Notifier(wm, EventHandler(cfg, q))
+        notifier = pyinotify.Notifier(wm, EventHandler(cfg, workq, watchq))
         mask = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO | pyinotify.IN_CLOSE_WRITE
         wdd = wm.add_watch(os.path.join(PHOTO_DIR, cfg.UI_SRCDIR), mask)
+        log('Source directory: %s' % os.path.join(PHOTO_DIR, cfg.UI_SRCDIR))
+        log('Destination directory: %s' % os.path.join(PHOTO_DIR, cfg.UI_DSTDIR))
+        log('Watching for changes...')
         notifier.loop()
     except:
         err = traceback.format_exc(2)
