@@ -14,3 +14,12 @@ Changelog
 
  * Fix issue #1: High CPU usage and DSM sluggish
 
+0.4 
+
+ * Bugfixes
+ 
+0.5
+
+ * Fix Issue #7: Fails under DSM 6 (pyinotify and a ps issue)
+ * Fix issues #5 & #6: Support PNG and MOV files
+ * Fix bug related to reindexing destination
