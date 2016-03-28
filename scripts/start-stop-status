@@ -4,7 +4,11 @@
 PID=""
 get_pid() 
 {
-    PID=`ps -w | grep -v grep | grep python | grep medio | awk '{print $1}'`
+    if [ ${SYNOPKG_DSM_VERSION_MAJOR} == '6' ]; then
+        PID=`ps axw | grep -v grep | grep python | grep medio | awk '{print $1}'`
+    else
+        PID=`ps axw | grep -v grep | grep python | grep medio | awk '{print $1}'`
+    fi
 }
 case $1 in
 	start)

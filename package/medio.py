@@ -103,7 +103,12 @@ class Worker(Thread):
         cmd = ['/usr/syno/bin/synoindex', '-n', dstfile, srcfile]
         p = Spawn(cmd)
         if p.retval != 0:
-            log('synoindex FAILED for ' + path + ': ' +  ' '.join(p.stderr.split('\n')))
+            log('synoindex FAILED for ' + os.path.dirname(srcfile) + ': ' +  ' '.join(p.stderr.split('\n')))
+	# Also index directory it moved to
+        cmd = ['/usr/syno/bin/synoindex', '-R', os.path.dirname(dstfile)]
+        p = Spawn(cmd)
+        if p.retval != 0:
+            log('synoindex FAILED for ' + os.path.dirname(dstfile) + ': ' +  ' '.join(p.stderr.split('\n')))
         # Queue a reindex on everything, cancel any such existing timer
         if self.reindex_timer:
             self.reindex_timer.cancel()
@@ -189,7 +194,7 @@ class EventHandler(pyinotify.ProcessEvent):
     def is_relevant_file(self, path):
         """Return whether or not we care about this file type"""
         (root, ext) = os.path.splitext(path)
-        if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4']:
+        if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4', '.png', '.mov']:
             return True
         return False
 

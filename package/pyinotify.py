@@ -206,15 +206,7 @@ class _CtypesLibcINotifyWrapper(INotifyWrapper):
     def init(self):
         assert ctypes
 
-        try_libc_name = 'c'
-        if sys.platform.startswith('freebsd'):
-            try_libc_name = 'inotify'
-
-        libc_name = None
-        try:
-            libc_name = ctypes.util.find_library(try_libc_name)
-        except (OSError, IOError):
-            pass  # Will attemp to load it with None anyway.
+        libc_name = '/lib/libc.so.6'
 
         if sys.version_info >= (2, 6):
             self._libc = ctypes.CDLL(libc_name, use_errno=True)
