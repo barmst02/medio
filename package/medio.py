@@ -194,7 +194,7 @@ class EventHandler(pyinotify.ProcessEvent):
     def is_relevant_file(self, path):
         """Return whether or not we care about this file type"""
         (root, ext) = os.path.splitext(path)
-        if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4', '.png', '.mov']:
+        if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4', '.png', '.mov', '.thm', '.avi']:
             return True
         return False
 
