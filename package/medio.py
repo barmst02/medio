@@ -26,11 +26,18 @@ class Config(object):
     
     @property
     def UI_SRCDIR(self):
-        return self.cfg.get('UI', 'UI_SRCDIR')
+        return self.cfg.get('UI', 'SRCDIR')
 
     @property
     def UI_DSTDIR(self):
-        return self.cfg.get('UI', 'UI_DSTDIR')
+        return self.cfg.get('UI', 'DSTDIR')
+
+    @property
+    def UI_DSTFMT(self):
+        dstfmt = r'%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e'
+        if self.cfg.has_option('UI', 'DSTFMT'):
+            dstfmt = self.cfg.get('UI', 'DSTFMT', True)
+        return dstfmt
 
 class Spawn(object):
     """A wrapper around subprocess just to save boilerplate"""
@@ -80,7 +87,7 @@ class Worker(Thread):
            to tell DSM about it."""
         # Use exiftool to do the rename
         srcfile = os.path.join(PHOTO_DIR, self.cfg.UI_SRCDIR, path)
-        dstfmt = os.path.join(PHOTO_DIR, self.cfg.UI_DSTDIR, r'%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e')
+        dstfmt = os.path.join(PHOTO_DIR, self.cfg.UI_DSTDIR, self.cfg.UI_DSTFMT)
         dstfile = None
         cmd = [os.path.join(PKGDIR, 'exiftool'), '-v', '-r', '-d', dstfmt, 
                 "-filename<filemodifydate", "-filename<createdate", 
@@ -104,7 +111,7 @@ class Worker(Thread):
         p = Spawn(cmd)
         if p.retval != 0:
             log('synoindex FAILED for ' + os.path.dirname(srcfile) + ': ' +  ' '.join(p.stderr.split('\n')))
-	# Also index directory it moved to
+        # Also index directory it moved to
         cmd = ['/usr/syno/bin/synoindex', '-R', os.path.dirname(dstfile)]
         p = Spawn(cmd)
         if p.retval != 0:
@@ -227,6 +234,7 @@ if __name__ == '__main__':
         wdd = wm.add_watch(os.path.join(PHOTO_DIR, cfg.UI_SRCDIR), mask)
         log('Source directory: %s' % os.path.join(PHOTO_DIR, cfg.UI_SRCDIR))
         log('Destination directory: %s' % os.path.join(PHOTO_DIR, cfg.UI_DSTDIR))
+        log('Destination filename format: %s' % cfg.UI_DSTFMT)
         log('Watching for changes...')
         notifier.loop()
     except:

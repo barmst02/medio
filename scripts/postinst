@@ -27,12 +27,14 @@ if [ ! -d $PHOTO_DIR$DSTDIR ]; then
     echo "Destination directory, ${DSTDIR}, does not exist" >> $SYNOPKG_TEMP_LOGFILE
     exit 1
 fi
+DSTFMT=$(echo "${UI_DSTFMT}")
 
 # Save off config for python to use later at runtime
 CFG="${SYNOPKG_PKGDEST}/cfg.ini"
 echo "[UI]" > $CFG
-echo "UI_SRCDIR=${SRCDIR}" >> $CFG
-echo "UI_DSTDIR=${DSTDIR}" >> $CFG
+echo "SRCDIR=${SRCDIR}" >> $CFG
+echo "DSTDIR=${DSTDIR}" >> $CFG
+echo "DSTFMT=${DSTFMT}" >> $CFG
 
 echo "[${DATE}] Installation successful" >> "${SYNOPKG_PKGDEST}/medio.log"
 echo "[${DATE}] Configuration saved at ${SYNOPKG_PKGDEST}/cfg.ini" >> "${SYNOPKG_PKGDEST}/medio.log"

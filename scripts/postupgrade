@@ -1,4 +1,10 @@
 #!/bin/sh
 # Copyright(c) 2016 Jonathan Poland
 cp ${SYNOPKG_PKGINST_TEMP_DIR}/cfg.ini ${SYNOPKG_PKGDEST}
+sed -ie 's/^UI_SRCDIR/SRCDIR/g' ${SYNOPKG_PKGDEST}/cfg.ini
+sed -ie 's/^UI_DSTDIR/DSTDIR/g' ${SYNOPKG_PKGDEST}/cfg.ini
+sed -ie 's/^UI_DSTFMT/DSTFMT/g' ${SYNOPKG_PKGDEST}/cfg.ini
+if ! grep -q "DSTFMT="  ${SYNOPKG_PKGDEST}/cfg.ini; then
+	echo "DSTFMT=%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e" >> ${SYNOPKG_PKGDEST}/cfg.ini
+fi
 exit 0

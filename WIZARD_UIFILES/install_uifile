@@ -1,17 +1,38 @@
 [{
-    "step_title": "Directories",
-    "items": [{
-        "type": "textfield",
-	"desc": "Directory configuration, relative to the photo share (/var/services/photo).  The Source Directory is monitored for new photos which are then moved into the Destination directory based on EXIF data.",
-	"subitems": [{
-	    "key": "UI_SRCDIR",
-	    "desc": "Source directory",
-	    "emptyText": "e.g. Unorganized",
-	    "defaultValue": "Unorganized"
-	 }, {
-	    "key": "UI_DSTDIR",
-	    "desc": "Destination directory",
-	    "emptyText": "(Root of photo share)"
-	 }]
-    }]
-}]
+	"step_title": "Source Configuration",
+	"items": [{
+        	"type": "textfield",
+		"desc": "Source directory.  This is where files are moved from.",
+		"subitems": [{
+			"key": "UI_SRCDIR",
+			"desc": "/var/services/photo/",
+			"emptyText": "(Root of photo share)",
+			"defaultValue": "Unorganized"
+		}]
+	}]
+}, {
+    	"step_title": "Destination Configuration",
+    	"items": [{
+		"type": "textfield",
+		"desc": "Destination directory.  This is where files are moved to.",
+		"subitems": [{
+			"key": "UI_DSTDIR",
+			"desc": "/var/services/photo/",
+			"emptyText": "(Root of photo share)",
+			"defaultValue": ""
+		}]
+	}, {
+		"type": "textfield",
+		"desc": "Filename format.  This determines how files moved to the destination directory are named.  Learn more at http://owl.phy.queensu.ca/~phil/exiftool/filename.html.  BE CAREFUL!",
+		"subitems": [{
+			"key": "UI_DSTFMT",
+			"desc": "Format",
+			"defaultValue": "%Y/%m_%b/%Y%m%d_%H%M%S%%c.%%e",
+			"validator": {
+				"allowBlank": false,
+				"minLength": 6
+			}
+		}]
+	}]
+}
+]
