@@ -2,13 +2,16 @@
     "step_title": "Directories",
     "items": [{
         "type": "textfield",
-	"desc": "Directory configuration, relative to the photo share.  The Source Directory is monitored for new photos which are then moved into the Destination directory based on EXIF data.",
+	"desc": "Directory configuration, relative to the photo share (/var/services/photo).  The Source Directory is monitored for new photos which are then moved into the Destination directory based on EXIF data.",
 	"subitems": [{
 	    "key": "UI_SRCDIR",
-	    "desc": "Source directory"
+	    "desc": "Source directory",
+	    "emptyText": "e.g. Unorganized",
+	    "defaultValue": "Unorganized"
 	 }, {
 	    "key": "UI_DSTDIR",
-	    "desc": "Destination directory"
+	    "desc": "Destination directory",
+	    "emptyText": "(Root of photo share)"
 	 }]
     }]
 }]
