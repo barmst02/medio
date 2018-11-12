@@ -12,6 +12,9 @@ from threading import Thread, _Timer
 PKGDIR="/usr/syno/synoman/webman/3rdparty/Medio"
 PHOTO_DIR = '/var/services/photo/'
 LOG=os.path.join(PKGDIR, 'medio.log')
+ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.mpg', '.mp4', '.png',
+                       '.mov', '.thm', '.avi', '.raw', '.arw', 
+                       '.heic', '.heif']
 
 def log(msg):
     l = open(LOG, "a")
@@ -201,7 +204,7 @@ class EventHandler(pyinotify.ProcessEvent):
     def is_relevant_file(self, path):
         """Return whether or not we care about this file type"""
         (root, ext) = os.path.splitext(path)
-        if ext.lower() in ['.jpg', '.jpeg', '.mpg', '.mp4', '.png', '.mov', '.thm', '.avi']:
+        if ext.lower() in ACCEPTED_EXTENSIONS:
             return True
         return False
 

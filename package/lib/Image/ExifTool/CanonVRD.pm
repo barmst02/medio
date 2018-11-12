@@ -10,6 +10,7 @@
 #               2010/06/18 - PH Support variable-length CustomPictureStyle data
 #               2010/09/14 - PH Added r/w support for XMP in VRD
 #               2015/05/16 - PH Added DR4 support (DPP 4.1.50.0)
+#               2018/03/13 - PH Update to DPP 4.8.20
 #
 # References:   1) Bogdan private communication (Canon DPP v3.4.1.1)
 #               2) Gert Kello private communiation (DPP 3.8)
@@ -22,7 +23,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Canon;
 
-$VERSION = '1.27';
+$VERSION = '1.32';
 
 sub ProcessCanonVRD($$;$);
 sub WriteCanonVRD($$;$);
@@ -486,7 +487,8 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITABLE => 1,
     FIRST_ENTRY => 0,
     FORMAT => 'int16s',
-    DATAMEMBER => [ 0x58, 0xdf, 0xea ], # (required for DataMember and var-format tags)
+    DATAMEMBER => [ 0x58, 0xdc, 0xdf, 0xe0 ], # (required for DataMember and var-format tags)
+    IS_SUBDIR => [ 0xe0 ],
     GROUPS => { 2 => 'Image' },
     NOTES => 'Tags added in DPP version 2.0 and later.',
     0x02 => {
@@ -923,7 +925,12 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     0xd9 => 'CropCircleRadius',
     # 0xda: 0, 1
     # 0xdb: 100
-    0xdc => { Name => 'DLOOn', %noYes },
+    0xdc => {
+        Name => 'DLOOn',
+        DataMember => 'DLOOn',
+        RawConv => '$$self{DLOOn} = $val',
+        %noYes,
+    },
     0xdd => 'DLOSetting',
     # (VRD 3.11.0 edit data ends here: 444 bytes, index 0xde)
     0xde => {
@@ -937,26 +944,53 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     },
     0xdf => {
         Name => 'DLODataLength',
+        DataMember => 'DLODataLength',
         Format => 'int32u',
         Writable => 0,
-        # - have seen 65536 when DLO is Off
-        #   --> this is my only sample where 0xda is 1 -- coincidence?
+        RawConv => '$$self{DLODataLength} = $val',
     },
-    # 0xe1 - 0 without DLO, seen 3112 with DLO
+    0xe0 => { # (yes, this overlaps DLODataLength)
+        Name => 'DLOInfo',
+        # - have seen DLODataLengths of 65536,64869 when DLO is Off, so must test DLOOn flag
+        Condition => '$$self{DLOOn}',
+        SubDirectory => { TagTable => 'Image::ExifTool::CanonVRD::DLOInfo' },
+        Hook => '$varSize += $$self{DLODataLength} + 0x16',
+    },
+    0xe1 => 'CameraRawColorTone',
     # (VRD 3.11.2 edit data ends here: 452 bytes, index 0xe2, unless DLO is on)
-    0xe4 => 'DLOSettingApplied',
-    0xe5 => {
+    0xe2 => 'CameraRawSaturation',
+    0xe3 => 'CameraRawContrast',
+    0xe4 => { Name => 'CameraRawLinear', %noYes },
+    0xe5 => 'CameraRawSharpness',
+    0xe6 => 'CameraRawHighlightPoint',
+    0xe7 => 'CameraRawShadowPoint',
+    0xe8 => 'CameraRawOutputHighlightPoint',
+    0xe9 => 'CameraRawOutputShadowPoint',
+);
+
+# DLO tags (ref PH)
+%Image::ExifTool::CanonVRD::DLOInfo = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    WRITE_PROC => \&Image::ExifTool::WriteBinaryData,
+    CHECK_PROC => \&Image::ExifTool::CheckBinaryData,
+    WRITABLE => 1,
+    FIRST_ENTRY => 1,
+    FORMAT => 'int16s',
+    GROUPS => { 2 => 'Image' },
+    NOTES => 'Tags added when DLO (Digital Lens Optimizer) is on.',
+    # 0x01 - seen 3112,3140
+    0x04 => 'DLOSettingApplied',
+    0x05 => {
         Name => 'DLOVersion', #(NC)
         Format => 'string[10]',
     },
-    0xea => {
+    0x0a => {
         Name => 'DLOData',
         LargeTag => 1, # large tag, so avoid storing unnecessarily
         Notes => 'variable-length Digital Lens Optimizer data, stored in JPEG-like format',
-        Format => 'var_undef[$val{0xdf}]',
+        Format => 'undef[$$self{DLODataLength}]',
         Writable => 0,
         Binary => 1,
-        RawConv => 'length($val) ? \$val : undef', # (don't extract if zero length)
     },
 );
 
@@ -1111,6 +1145,8 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     0x20600 => 'LuminanceNoiseReduction',
     0x20601 => 'ChrominanceNoiseReduction',
     # 0x20650 - fmt=9: 0 (JPG images)
+    0x20670 => 'ColorMoireReduction',
+   '0x20670.0' => { Name => 'ColorMoireReductionOn', %noYes },
     0x20701 => {
         Name => 'ShootingDistance',
         Notes => '100% = infinity',
@@ -1162,13 +1198,14 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     },
     # 0x20800 - fmt=1: 0
     # 0x20801 - fmt=1: 0
+    0x2070b => { Name => 'DiffractionCorrectionOn', %noYes },
     0x20900 => 'ColorHue',
     0x20901 => 'SaturationAdj',
     0x20910 => 'RedHSL',
     0x20911 => 'OrangeHSL',
-    0x20912 => 'GreenHSL',
-    0x20913 => 'AquaHSL',
-    0x20914 => 'BlueHSL',
+    0x20912 => 'YellowHSL',
+    0x20913 => 'GreenHSL',
+    0x20914 => 'AquaHSL',
     0x20915 => 'BlueHSL',
     0x20916 => 'PurpleHSL',
     0x20917 => 'MagentaHSL',
@@ -1247,7 +1284,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
         Name => 'DR4CameraModel',
         Writable => 'int32u',
         PrintHex => 1,
-        SeparateTable => 'Canon CameraModelID',
+        SeparateTable => 'Canon CanonModelID',
         PrintConv => \%Image::ExifTool::Canon::canonModelID,
     },
     # 4 - value: 3
@@ -1484,6 +1521,7 @@ sub ProcessEditData($$$)
         # make a copy for editing in place
         my $buff = substr($$dataPt, $pos, $dirLen);
         $dataPt = $$dirInfo{DataPt} = \$buff;
+        $dataPos += $pos;
         $pos = $$dirInfo{DirStart} = 0;
     }
     my $dirEnd = $pos + $dirLen;
@@ -1509,16 +1547,7 @@ sub ProcessEditData($$$)
         if ($verbose > 1 and not $outfile) {
             printf $out "$$et{INDENT}CanonVRD Edit record ($recLen bytes at offset 0x%x)\n",
                    $pos + $dataPos;
-            if ($recNum and $verbose > 2) {
-                my %parms = (
-                    Start  => $pos,
-                    Addr   => $pos + $dataPos,
-                    Out    => $out,
-                    Prefix => $$et{INDENT},
-                );
-                $parms{MaxLen} = $verbose == 3 ? 96 : 2048 if $verbose < 5;
-                HexDump($dataPt, $recLen, %parms);
-            }
+            $et->VerboseDump($dataPt, Len => $recLen, Start => $pos, Addr => $pos + $dataPos) if $recNum;
         }
 
         # our edit information is the 0th record, so don't process the others
@@ -2092,16 +2121,7 @@ sub ProcessCanonVRD($$;$)
         if ($verbose > 1 and not $outfile) {
             printf $out "  CanonVRD block 0x%.8x ($blockLen bytes at offset 0x%x)\n",
                 $blockType, $pos + $$dirInfo{DataPos};
-            if ($verbose > 2) {
-                my %parms = (
-                    Start  => $pos,
-                    Addr   => $pos + $$dirInfo{DataPos},
-                    Out    => $out,
-                    Prefix => $$et{INDENT},
-                );
-                $parms{MaxLen} = $verbose == 3 ? 96 : 2048 if $verbose < 5;
-                HexDump($dataPt, $blockLen, %parms);
-            }
+            $et->VerboseDump($dataPt, Len => $blockLen, Start => $pos, Addr => $pos + $$dirInfo{DataPos});
         }
         my $tagInfo = $$tagTablePtr{$blockType};
         unless ($tagInfo) {
@@ -2222,7 +2242,7 @@ files, and as a trailer in JPEG, CRW, CR2 and TIFF images.
 
 =head1 AUTHOR
 
-Copyright 2003-2015, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
