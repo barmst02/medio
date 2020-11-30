@@ -1,5 +1,5 @@
-# Copyright(c) 2016-2018 Jonathan Poland
-VERSION = 0.7
+# Copyright(c) 2016-2020 Jonathan Poland
+VERSION = 0.8
 UI := $(shell find WIZARD_UIFILES -type f -print)
 SCRIPTS := $(shell find scripts -type f -print)
 PACKAGE_FILES := $(shell ./package.sh)

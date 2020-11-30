@@ -1,6 +1,6 @@
 package="Medio"
 displayname="Medio"
-version="0.7"
+version="0.8"
 maintainer="Jonathan Poland"
 description="Medio is a package for Synology DSM that automatically organizes your photos and videos chronologically based on file metadata."
 helpurl="https://bitbucket.org/polandj/medio/"

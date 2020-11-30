@@ -14,7 +14,7 @@ PHOTO_DIR = '/var/services/photo/'
 LOG=os.path.join(PKGDIR, 'medio.log')
 ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.mpg', '.mp4', '.png',
                        '.mov', '.thm', '.avi', '.raw', '.arw', 
-                       '.heic', '.heif']
+                       '.heic', '.heif', '.nef', '.3gp']
 
 def log(msg):
     l = open(LOG, "a")
